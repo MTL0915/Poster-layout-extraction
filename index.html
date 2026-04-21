@@ -1,0 +1,1167 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>MTL-海报版式提取工具 (豆包视觉版)</title>
+<style>
+  * { box-sizing: border-box; }
+  html, body { height: 100%; margin: 0; overflow: hidden; }
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif;
+    background: #f5f5f7;
+    color: #1d1d1f;
+    display: flex;
+    flex-direction: column;
+  }
+  header {
+    background: #fff;
+    border-bottom: 1px solid #e5e5e7;
+    padding: 12px 20px;
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    flex-wrap: wrap;
+    flex-shrink: 0;
+  }
+  header h1 {
+    font-size: 15px;
+    font-weight: 600;
+    margin: 0;
+    flex-shrink: 0;
+  }
+  header h1 .badge {
+    display: inline-block;
+    background: #ff3b30;
+    color: #fff;
+    font-size: 11px;
+    padding: 2px 6px;
+    border-radius: 4px;
+    font-weight: 500;
+    margin-left: 4px;
+    vertical-align: middle;
+  }
+  .config-row {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 13px;
+    flex: 1;
+    min-width: 280px;
+    flex-wrap: wrap;
+  }
+  .config-row input, .config-row select {
+    padding: 6px 10px;
+    border: 1px solid #d2d2d7;
+    border-radius: 6px;
+    font-size: 13px;
+    font-family: monospace;
+  }
+  .config-row input[type="password"] { flex: 1; min-width: 160px; }
+  .config-row select { font-family: inherit; background: #fff; max-width: 260px; }
+  .config-row label { color: #6e6e73; white-space: nowrap; }
+  .btn {
+    padding: 7px 14px;
+    border: 1px solid #d2d2d7;
+    background: #fff;
+    color: #1d1d1f;
+    border-radius: 6px;
+    font-size: 13px;
+    cursor: pointer;
+    transition: all 0.15s;
+    font-family: inherit;
+    white-space: nowrap;
+  }
+  .btn:hover { background: #f5f5f7; }
+  .btn:disabled { opacity: 0.5; cursor: not-allowed; }
+  .btn-primary { background: #0071e3; color: #fff; border-color: #0071e3; }
+  .btn-primary:hover:not(:disabled) { background: #0077ed; }
+  .btn-success { background: #34c759; color: #fff; border-color: #34c759; }
+  .btn-success:hover:not(:disabled) { background: #30b84f; }
+  .btn-fit {
+    background: #ff9500;
+    color: #fff;
+    border-color: #ff9500;
+  }
+  .btn-fit:hover:not(:disabled) { background: #e68600; }
+
+  main {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 12px;
+    padding: 12px;
+    flex: 1;
+    min-height: 0;
+    overflow: hidden;
+  }
+  .panel {
+    background: #fff;
+    border-radius: 10px;
+    border: 1px solid #e5e5e7;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+    min-height: 0;
+  }
+  .panel-header {
+    padding: 10px 14px;
+    border-bottom: 1px solid #e5e5e7;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+    flex-wrap: wrap;
+    flex-shrink: 0;
+  }
+  .panel-title { font-size: 14px; font-weight: 600; }
+  .panel-body {
+    flex: 1;
+    padding: 14px;
+    overflow: auto;
+    min-height: 0;
+    display: flex;
+    align-items: flex-start;
+    justify-content: center;
+  }
+
+  .upload-area {
+    border: 2px dashed #d2d2d7;
+    border-radius: 8px;
+    padding: 40px 20px;
+    text-align: center;
+    color: #6e6e73;
+    cursor: pointer;
+    transition: all 0.2s;
+    width: 100%;
+    max-width: 400px;
+  }
+  .upload-area:hover { border-color: #0071e3; background: #f5f9ff; }
+  #previewImg {
+    max-width: 100%;
+    max-height: 100%;
+    width: auto;
+    height: auto;
+    display: block;
+    border-radius: 4px;
+    box-shadow: 0 0 0 1px #e5e5e7;
+  }
+
+  #layoutCanvas {
+    position: relative;
+    background: #fff;
+    box-shadow: 0 0 0 1px #e5e5e7;
+    border-radius: 4px;
+    flex-shrink: 0;
+  }
+  .text-element {
+    position: absolute;
+    color: #000;
+    line-height: 1.15;
+    word-break: break-word;
+    padding: 2px 3px;
+    border: 1px solid transparent;
+    border-radius: 2px;
+    transition: border-color 0.12s, background 0.12s;
+    cursor: move;
+    white-space: normal;
+    /* 不再 overflow:hidden，让文字自然撑开 */
+  }
+  .text-element:hover { border-color: rgba(0, 113, 227, 0.4); }
+  .text-element.selected {
+    border-color: #0071e3;
+    background: rgba(0, 113, 227, 0.04);
+    z-index: 10;
+  }
+  .text-element.overflow {
+    border-color: #ff9500;
+    border-style: dashed;
+    background: rgba(255, 149, 0, 0.06);
+  }
+  .text-element.editing {
+    cursor: text;
+    background: rgba(255, 200, 0, 0.1);
+    border-color: #ffa500;
+    border-style: solid;
+  }
+  .text-element[contenteditable="true"] { outline: none; }
+
+  .resize-handle {
+    position: absolute;
+    width: 9px;
+    height: 9px;
+    background: #fff;
+    border: 1.5px solid #0071e3;
+    border-radius: 50%;
+    z-index: 20;
+  }
+  .resize-handle.nw { top: -5px; left: -5px; cursor: nw-resize; }
+  .resize-handle.n  { top: -5px; left: 50%; transform: translateX(-50%); cursor: n-resize; }
+  .resize-handle.ne { top: -5px; right: -5px; cursor: ne-resize; }
+  .resize-handle.e  { top: 50%; right: -5px; transform: translateY(-50%); cursor: e-resize; }
+  .resize-handle.se { bottom: -5px; right: -5px; cursor: se-resize; }
+  .resize-handle.s  { bottom: -5px; left: 50%; transform: translateX(-50%); cursor: s-resize; }
+  .resize-handle.sw { bottom: -5px; left: -5px; cursor: sw-resize; }
+  .resize-handle.w  { top: 50%; left: -5px; transform: translateY(-50%); cursor: w-resize; }
+
+  .delete-btn {
+    position: absolute;
+    top: -11px;
+    right: -11px;
+    width: 20px;
+    height: 20px;
+    background: #ff3b30;
+    color: #fff;
+    border-radius: 50%;
+    font-size: 13px;
+    line-height: 20px;
+    text-align: center;
+    cursor: pointer;
+    z-index: 21;
+    user-select: none;
+  }
+
+  .status {
+    padding: 8px 14px;
+    font-size: 12px;
+    text-align: center;
+    flex-shrink: 0;
+  }
+  .status.loading { background: #fff9e6; color: #8a6d0f; }
+  .status.success { background: #e8f5e9; color: #2e7d32; }
+  .status.error { background: #ffeceb; color: #c62828; }
+
+  .empty-state {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    color: #86868b;
+    gap: 8px;
+    text-align: center;
+    padding: 40px 20px;
+  }
+  .empty-state .icon { font-size: 42px; opacity: 0.3; }
+  .empty-state .hint { font-size: 13px; }
+
+  .spinner {
+    display: inline-block;
+    width: 14px;
+    height: 14px;
+    border: 2px solid #d2d2d7;
+    border-top-color: #0071e3;
+    border-radius: 50%;
+    animation: spin 0.8s linear infinite;
+    vertical-align: middle;
+    margin-right: 6px;
+  }
+  @keyframes spin { to { transform: rotate(360deg); } }
+
+  .tip {
+    background: #fff9e6;
+    border: 1px solid #ffecb3;
+    border-radius: 6px;
+    padding: 8px 12px;
+    font-size: 12px;
+    color: #8a6d0f;
+    width: 100%;
+    max-width: 400px;
+    margin-bottom: 12px;
+  }
+  .tip a { color: #0071e3; }
+
+  .inspector {
+    position: absolute;
+    bottom: 16px;
+    right: 16px;
+    background: rgba(255, 255, 255, 0.98);
+    border: 1px solid #e5e5e7;
+    border-radius: 8px;
+    padding: 10px 12px;
+    font-size: 12px;
+    box-shadow: 0 4px 16px rgba(0,0,0,0.12);
+    display: none;
+    z-index: 30;
+    min-width: 220px;
+  }
+  .inspector.active { display: block; }
+  .inspector .row {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    margin-bottom: 6px;
+  }
+  .inspector .row:last-child { margin-bottom: 0; }
+  .inspector label {
+    color: #6e6e73;
+    min-width: 36px;
+    font-size: 11px;
+  }
+  .inspector input[type="number"] {
+    width: 60px;
+    padding: 3px 6px;
+    border: 1px solid #d2d2d7;
+    border-radius: 4px;
+    font-size: 11px;
+  }
+  .inspector button {
+    padding: 3px 10px;
+    font-size: 11px;
+    border: 1px solid #d2d2d7;
+    background: #fff;
+    border-radius: 4px;
+    cursor: pointer;
+    white-space: nowrap;
+  }
+  .inspector button.active {
+    background: #0071e3;
+    color: #fff;
+    border-color: #0071e3;
+  }
+  .inspector .fit-row {
+    margin-top: 8px;
+    padding-top: 8px;
+    border-top: 1px dashed #e5e5e7;
+    gap: 4px;
+  }
+  .inspector .fit-row button {
+    flex: 1;
+    background: #f5f5f7;
+    font-size: 10px;
+  }
+  .inspector .fit-row button:hover { background: #e5e5e7; }
+
+  /* 顶部选中元素快捷操作 */
+  .quick-actions {
+    margin-top: 8px;
+    padding-top: 8px;
+    border-top: 1px dashed #e5e5e7;
+    display: flex;
+    gap: 4px;
+  }
+  .quick-actions button {
+    flex: 1;
+    font-size: 10px;
+  }
+
+  details { font-size: 12px; color: #6e6e73; flex-shrink: 0; }
+  details summary { cursor: pointer; padding: 6px 14px; }
+  pre {
+    background: #f5f5f7;
+    padding: 8px;
+    border-radius: 4px;
+    overflow: auto;
+    max-height: 150px;
+    font-size: 11px;
+    margin: 0 14px 8px;
+  }
+
+  /* 批量操作按钮条 */
+  .toolbar-bottom {
+    display: flex;
+    gap: 6px;
+    padding: 6px 14px;
+    border-top: 1px solid #e5e5e7;
+    background: #fafafa;
+    flex-shrink: 0;
+    font-size: 12px;
+    align-items: center;
+  }
+  .toolbar-bottom span { color: #6e6e73; margin-right: 6px; }
+</style>
+</head>
+<body>
+
+<header>
+  <h1>海报版式提取工具<span class="badge">豆包视觉</span></h1>
+  <div class="config-row">
+    <label>API Key:</label>
+    <input type="password" id="apiKey" placeholder="方舟控制台获取的 API Key" />
+    <label>模型:</label>
+    <select id="modelSelect">
+      <optgroup label="豆包 2.0 系列（最新推荐）">
+        <option value="doubao-seed-2-0-pro-260215">doubao-seed-2.0-pro (旗舰·视觉最强)</option>
+        <option value="doubao-seed-2-0-lite-260215">doubao-seed-2.0-lite (均衡·性价比)</option>
+        <option value="doubao-seed-2-0-mini-260215">doubao-seed-2.0-mini (最便宜)</option>
+      </optgroup>
+      <optgroup label="豆包 1.6 系列">
+        <option value="doubao-seed-1-6-vision-250815">doubao-seed-1.6-vision</option>
+      </optgroup>
+      <optgroup label="豆包 1.5 系列">
+        <option value="doubao-1-5-vision-pro-250328">doubao-1.5-vision-pro</option>
+        <option value="doubao-1-5-thinking-vision-pro-250428">doubao-1.5-thinking-vision-pro</option>
+      </optgroup>
+    </select>
+    <button class="btn" id="saveKeyBtn">保存</button>
+  </div>
+  <button class="btn btn-primary" id="analyzeBtn" disabled>
+    <span id="analyzeBtnText">AI 识别版式</span>
+  </button>
+  <button class="btn btn-success" id="exportBtn" disabled>导出 PPTX</button>
+</header>
+
+<main>
+  <div class="panel">
+    <div class="panel-header">
+      <span class="panel-title">① 原始参考图</span>
+      <label class="btn" style="cursor: pointer;">
+        选择图片
+        <input type="file" id="fileInput" accept="image/*" style="display: none;" />
+      </label>
+    </div>
+    <div class="panel-body" id="leftBody">
+      <div id="leftContent" style="width: 100%; height: 100%; display: flex; flex-direction: column; align-items: center; justify-content: flex-start;">
+        <div class="tip">
+          💡 没有 API Key？前往 <a href="https://console.volcengine.com/ark" target="_blank">火山引擎方舟控制台</a> 开通。推荐用 <b>豆包 2.0 Pro</b>，视觉理解最强，一张海报约 0.01-0.03 元。
+        </div>
+        <div class="upload-area" id="uploadArea">
+          <div style="font-size: 32px; margin-bottom: 6px;">📁</div>
+          <div>点击"选择图片"上传参考海报</div>
+          <div style="font-size: 12px; margin-top: 4px; color: #86868b;">支持 PNG / JPG</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="panel">
+    <div class="panel-header">
+      <span class="panel-title">② 版式骨架图（可编辑）</span>
+      <div style="display: flex; gap: 6px;">
+        <button class="btn btn-fit" id="fitAllBtn" style="font-size: 12px; padding: 4px 10px;" title="所有溢出的元素自动调整字号以适应框宽">一键修复溢出</button>
+        <button class="btn" id="clearBtn" style="font-size: 12px; padding: 4px 10px;">清空</button>
+        <button class="btn" id="addTextBtn" style="font-size: 12px; padding: 4px 10px;">+ 添加文字</button>
+      </div>
+    </div>
+    <div class="panel-body" id="rightBody" style="position: relative;">
+      <div class="empty-state" id="canvasEmpty">
+        <div class="icon">📄</div>
+        <div>AI 识别后，版式骨架图将显示在这里</div>
+        <div class="hint">单击选中 · 拖动移动 · 四角缩放 · 双击编辑文字 · Delete 删除</div>
+      </div>
+      <div id="layoutCanvas" style="display: none;"></div>
+
+      <div class="inspector" id="inspector">
+        <div class="row">
+          <label>字号</label>
+          <input type="number" id="fontSizeInput" min="4" max="300" step="1" />
+          <span style="color: #86868b;">px</span>
+        </div>
+        <div class="row">
+          <label>粗细</label>
+          <button id="btnWeight" style="flex: 1;">加粗</button>
+        </div>
+        <div class="row">
+          <label>对齐</label>
+          <button data-align="left">左</button>
+          <button data-align="center">中</button>
+          <button data-align="right">右</button>
+        </div>
+        <div class="row fit-row">
+          <button id="btnFitFontToBox" title="自动缩小字号以适应框宽">字号适应框</button>
+          <button id="btnFitBoxToFont" title="自动放大框体以容纳文字">框体适应字</button>
+        </div>
+      </div>
+    </div>
+    <div class="toolbar-bottom">
+      <span id="overflowCount">—</span>
+    </div>
+    <div class="status" id="status" style="display: none;"></div>
+    <details>
+      <summary>查看 AI 识别的 JSON 数据</summary>
+      <pre id="jsonOutput"></pre>
+    </details>
+  </div>
+</main>
+
+<script src="https://cdn.jsdelivr.net/gh/gitbrent/pptxgenjs@3.12.0/dist/pptxgen.bundle.js"></script>
+<script>
+const ARK_ENDPOINT = 'https://ark.cn-beijing.volces.com/api/v3/chat/completions';
+const $ = id => document.getElementById(id);
+
+let state = {
+  imageBase64: null,
+  imageMediaType: null,
+  imageWidth: 0,
+  imageHeight: 0,
+  elements: [],
+  selectedIdx: -1,
+  canvasWidth: 0,
+  canvasHeight: 0,
+};
+
+// 用于测量文字实际宽度的离屏 canvas
+const measureCanvas = document.createElement('canvas');
+const measureCtx = measureCanvas.getContext('2d');
+
+function measureText(text, fontSizePx, bold) {
+  measureCtx.font = `${bold ? '700' : '400'} ${fontSizePx}px "Microsoft YaHei", -apple-system, sans-serif`;
+  return measureCtx.measureText(text).width;
+}
+
+// ===== 配置持久化 =====
+const savedKey = localStorage.getItem('ark_api_key');
+if (savedKey) $('apiKey').value = savedKey;
+const savedModel = localStorage.getItem('ark_model');
+if (savedModel) {
+  // 只在选项里存在时才用
+  const opt = $('modelSelect').querySelector(`option[value="${savedModel}"]`);
+  if (opt) $('modelSelect').value = savedModel;
+}
+
+$('saveKeyBtn').onclick = () => {
+  const key = $('apiKey').value.trim();
+  const model = $('modelSelect').value;
+  if (key) {
+    localStorage.setItem('ark_api_key', key);
+    localStorage.setItem('ark_model', model);
+    setStatus('配置已保存', 'success');
+    setTimeout(clearStatus, 2000);
+  }
+};
+$('modelSelect').onchange = () => localStorage.setItem('ark_model', $('modelSelect').value);
+
+// ===== 图片上传 =====
+$('fileInput').onchange = e => {
+  const file = e.target.files[0];
+  if (!file) return;
+  state.imageMediaType = file.type;
+  const reader = new FileReader();
+  reader.onload = ev => {
+    state.imageBase64 = ev.target.result;
+    const img = new Image();
+    img.onload = () => {
+      state.imageWidth = img.naturalWidth;
+      state.imageHeight = img.naturalHeight;
+      $('leftContent').innerHTML = `<img id="previewImg" src="${state.imageBase64}" alt="参考图" />`;
+      $('analyzeBtn').disabled = false;
+    };
+    img.src = state.imageBase64;
+  };
+  reader.readAsDataURL(file);
+};
+
+// ===== AI 识别 =====
+$('analyzeBtn').onclick = async () => {
+  const apiKey = $('apiKey').value.trim();
+  const model = $('modelSelect').value;
+  if (!apiKey) { setStatus('请先填入 API Key', 'error'); return; }
+  if (!state.imageBase64) { setStatus('请先上传参考图', 'error'); return; }
+
+  $('analyzeBtn').disabled = true;
+  $('analyzeBtnText').innerHTML = '<span class="spinner"></span>识别中...';
+  setStatus(`正在调用 ${model}，约需 10-30 秒...`, 'loading');
+
+  try {
+    const prompt = `你是海报版式分析师。仔细分析这张海报，识别所有可见的文字元素（品牌、标题、数据、价格、按钮、注释等），返回JSON数组。
+
+每个元素必须包含：
+- "text": 文字内容（保留原文）
+- "x": 左上角横坐标（0-1小数，相对整图宽度）
+- "y": 左上角纵坐标（0-1小数，相对整图高度）
+- "w": 宽度占比（0-1小数），必须足够容纳文字内容
+- "h": 高度占比（0-1小数），必须足够容纳文字行高
+- "fontSize": 字号相对图片高度的比例（例如 0.05 = 字号为图片高度的5%）
+- "weight": "bold" 或 "normal"
+- "align": "left" / "center" / "right"
+- "role": "brand"/"title"/"subtitle"/"body"/"data"/"price"/"cta"/"note"
+
+严格要求：
+1. **w 和 h 必须足够大**，宁可稍微偏大也不要偏小，确保框体能完全容纳文字。例如一段长文字，w 要给够宽度，不然渲染时会被截断
+2. fontSize 要反映实际视觉大小：正文 0.015-0.025，副标题 0.03-0.05，主标题 0.06-0.12，超大主视觉 0.12-0.2
+3. w ≈ 文字字符数 × fontSize × 0.6（中文）或 × 0.55（英文）。例如 10 个中文字 + fontSize 0.03，则 w 至少 0.18
+4. 视觉上是一个整体的文字作为一个元素，不要拆分
+5. 只识别文字，不识别装饰图形
+6. 只返回纯JSON数组，不要markdown代码块、不要任何解释
+
+示例：[{"text":"618上新盛典","x":0.35,"y":0.78,"w":0.55,"h":0.06,"fontSize":0.06,"weight":"bold","align":"left","role":"title"}]`;
+
+    const response = await fetch(ARK_ENDPOINT, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': 'Bearer ' + apiKey
+      },
+      body: JSON.stringify({
+        model,
+        messages: [{
+          role: 'user',
+          content: [
+            { type: 'image_url', image_url: { url: state.imageBase64 } },
+            { type: 'text', text: prompt }
+          ]
+        }],
+        temperature: 0.1,
+        max_tokens: 8192
+      })
+    });
+
+    if (!response.ok) {
+      const errText = await response.text();
+      throw new Error(`API 错误 ${response.status}: ${errText}`);
+    }
+    const data = await response.json();
+    if (!data.choices || !data.choices[0]) throw new Error('API 返回格式异常');
+    const textResponse = data.choices[0].message.content || '';
+
+    let jsonStr = textResponse.trim();
+    if (jsonStr.startsWith('```')) {
+      jsonStr = jsonStr.replace(/^```(?:json)?\s*/, '').replace(/\s*```$/, '');
+    }
+    const first = jsonStr.indexOf('[');
+    const last = jsonStr.lastIndexOf(']');
+    if (first >= 0 && last > first) jsonStr = jsonStr.substring(first, last + 1);
+
+    const elements = JSON.parse(jsonStr);
+    if (!Array.isArray(elements)) throw new Error('AI 返回的不是数组');
+
+    state.elements = elements;
+    state.selectedIdx = -1;
+    $('jsonOutput').textContent = JSON.stringify(elements, null, 2);
+
+    renderLayout();
+
+    // 识别完成后自动修复溢出
+    const overflowFixed = autoFixOverflow();
+    let msg = `识别完成，共 ${elements.length} 个文字元素`;
+    if (overflowFixed > 0) msg += `，自动修复 ${overflowFixed} 处字号溢出`;
+    setStatus(msg, 'success');
+
+    $('exportBtn').disabled = false;
+  } catch (err) {
+    console.error(err);
+    let msg = err.message;
+    if (msg.includes('Failed to fetch') || msg.includes('NetworkError')) {
+      msg = '网络请求失败。请使用本地HTTP服务器（命令行: python3 -m http.server 8000），不要直接双击打开';
+    } else if (msg.includes('401')) msg = 'API Key 无效';
+    else if (msg.includes('403')) msg = '模型未开通，请到方舟控制台开通该模型';
+    else if (msg.includes('404') || msg.includes('model not found')) msg = '模型不存在或未开通，请换一个模型试试';
+    else if (msg.includes('429')) msg = '请求过频或额度不足';
+    setStatus('识别失败: ' + msg, 'error');
+  } finally {
+    $('analyzeBtn').disabled = false;
+    $('analyzeBtnText').textContent = 'AI 识别版式';
+  }
+};
+
+// ===== 渲染画布 =====
+function renderLayout() {
+  const canvas = $('layoutCanvas');
+  const rightBody = $('rightBody');
+  $('canvasEmpty').style.display = 'none';
+  canvas.style.display = 'block';
+
+  const availW = rightBody.clientWidth - 28;
+  const availH = rightBody.clientHeight - 28;
+  const imgRatio = state.imageWidth / state.imageHeight;
+  const availRatio = availW / availH;
+
+  let cw, ch;
+  if (imgRatio > availRatio) {
+    cw = availW;
+    ch = cw / imgRatio;
+  } else {
+    ch = availH;
+    cw = ch * imgRatio;
+  }
+
+  state.canvasWidth = cw;
+  state.canvasHeight = ch;
+  canvas.style.width = cw + 'px';
+  canvas.style.height = ch + 'px';
+
+  canvas.innerHTML = '';
+  state.elements.forEach((el, idx) => renderElement(el, idx));
+  updateInspector();
+  updateOverflowCount();
+}
+
+function renderElement(el, idx) {
+  const canvas = $('layoutCanvas');
+  const div = document.createElement('div');
+  div.className = 'text-element';
+  div.dataset.idx = idx;
+  div.textContent = el.text;
+  applyElementStyle(div, el);
+
+  div.addEventListener('mousedown', e => {
+    if (e.target.classList.contains('resize-handle')) return;
+    if (e.target.classList.contains('delete-btn')) return;
+    if (div.classList.contains('editing')) return;
+    e.preventDefault();
+    e.stopPropagation();
+    if (state.selectedIdx !== idx) selectElement(idx);
+    startDrag(e, idx);
+  });
+
+  div.addEventListener('dblclick', e => {
+    e.stopPropagation();
+    enterEditMode(div, idx);
+  });
+
+  canvas.appendChild(div);
+
+  if (idx === state.selectedIdx) {
+    div.classList.add('selected');
+    addHandles(div, idx);
+  }
+
+  // 渲染后检测溢出
+  checkOverflow(div, el);
+}
+
+function applyElementStyle(div, el) {
+  div.style.left = (el.x * 100) + '%';
+  div.style.top = (el.y * 100) + '%';
+  div.style.width = (el.w * 100) + '%';
+  // 关键：使用 min-height 而不是 height，文字多了能自动撑开
+  div.style.minHeight = (el.h * 100) + '%';
+  div.style.height = 'auto';
+
+  if (!el._fontSizePx) {
+    const rel = el.fontSize || el.h * 0.7;
+    el._fontSizePx = Math.max(8, Math.min(140, rel * state.canvasHeight));
+  }
+  div.style.fontSize = el._fontSizePx + 'px';
+  div.style.fontWeight = el.weight === 'bold' ? '700' : '400';
+  div.style.textAlign = el.align || 'left';
+}
+
+// 检测元素是否溢出原始框
+function checkOverflow(div, el) {
+  const expectedW = el.w * state.canvasWidth;
+  const expectedH = el.h * state.canvasHeight;
+  // 实际渲染后的尺寸
+  const actualH = div.scrollHeight;
+  // 判断文字宽度是否超框（粗略估算）
+  const approxTextW = measureText(el.text, el._fontSizePx, el.weight === 'bold');
+  const lines = Math.ceil(approxTextW / (expectedW - 8));
+  const isOverflow = actualH > expectedH + 2 || (lines === 1 && approxTextW > expectedW);
+  div.classList.toggle('overflow', isOverflow && !div.classList.contains('selected'));
+  el._overflow = isOverflow;
+}
+
+function updateOverflowCount() {
+  const count = state.elements.filter(e => e._overflow).length;
+  const total = state.elements.length;
+  const el = $('overflowCount');
+  if (total === 0) {
+    el.textContent = '—';
+    el.style.color = '#6e6e73';
+  } else if (count === 0) {
+    el.textContent = `✓ 共 ${total} 个元素，全部正常显示`;
+    el.style.color = '#2e7d32';
+  } else {
+    el.innerHTML = `⚠ 共 ${total} 个元素，<b style="color:#ff9500">${count} 个文字溢出边框</b>（橙色虚线标出），可点击右上"一键修复溢出"`;
+    el.style.color = '#6e6e73';
+  }
+}
+
+// 自动修复溢出：缩小字号，让文字能装下
+function autoFixOverflow() {
+  let fixedCount = 0;
+  state.elements.forEach((el, idx) => {
+    if (!el._overflow) return;
+    fitFontToBox(el);
+    fixedCount++;
+  });
+  if (fixedCount > 0) renderLayout();
+  return fixedCount;
+}
+
+// 缩小字号以适应框宽
+function fitFontToBox(el) {
+  const boxW = el.w * state.canvasWidth - 8; // 减去 padding
+  const boxH = el.h * state.canvasHeight;
+  if (boxW <= 0 || boxH <= 0) return;
+
+  // 二分法找最大可容纳字号
+  let lo = 6, hi = el._fontSizePx || 100;
+  const bold = el.weight === 'bold';
+  const isChinese = /[\u4e00-\u9fff]/.test(el.text);
+  const lineHeight = 1.15;
+  // 简单策略：从当前字号开始递减
+  let sz = hi;
+  while (sz > 6) {
+    const textW = measureText(el.text, sz, bold);
+    const lineCount = Math.max(1, Math.ceil(textW / boxW));
+    const totalH = lineCount * sz * lineHeight;
+    if (textW <= boxW * Math.max(1, Math.floor(boxH / (sz * lineHeight))) && totalH <= boxH + 2) {
+      break;
+    }
+    sz -= 1;
+  }
+  el._fontSizePx = Math.max(6, sz);
+  el._overflow = false;
+}
+
+// 放大框体以容纳文字
+function fitBoxToFont(el) {
+  const fontSize = el._fontSizePx || 12;
+  const bold = el.weight === 'bold';
+  const textW = measureText(el.text, fontSize, bold);
+  const boxW = el.w * state.canvasWidth;
+  if (textW > boxW - 8) {
+    // 增加宽度
+    const neededW = (textW + 10) / state.canvasWidth;
+    el.w = Math.min(1 - el.x, neededW);
+  }
+  // 计算高度
+  const newBoxW = el.w * state.canvasWidth - 8;
+  const lineCount = Math.max(1, Math.ceil(textW / newBoxW));
+  const neededH = (lineCount * fontSize * 1.2 + 6) / state.canvasHeight;
+  el.h = Math.min(1 - el.y, Math.max(el.h, neededH));
+  el._overflow = false;
+}
+
+function selectElement(idx) {
+  state.selectedIdx = idx;
+  document.querySelectorAll('.text-element').forEach(el => {
+    el.classList.remove('selected');
+    el.querySelectorAll('.resize-handle, .delete-btn').forEach(h => h.remove());
+  });
+  if (idx >= 0) {
+    const el = document.querySelector(`.text-element[data-idx="${idx}"]`);
+    if (el) {
+      el.classList.add('selected');
+      el.classList.remove('overflow');
+      addHandles(el, idx);
+    }
+  }
+  updateInspector();
+}
+
+$('layoutCanvas').addEventListener('mousedown', e => {
+  if (e.target.id === 'layoutCanvas') {
+    selectElement(-1);
+    // 刷新溢出标记
+    state.elements.forEach((el, idx) => {
+      const div = document.querySelector(`.text-element[data-idx="${idx}"]`);
+      if (div) checkOverflow(div, el);
+    });
+  }
+});
+
+function addHandles(div, idx) {
+  const del = document.createElement('div');
+  del.className = 'delete-btn';
+  del.textContent = '×';
+  del.addEventListener('mousedown', e => {
+    e.preventDefault();
+    e.stopPropagation();
+    state.elements.splice(idx, 1);
+    state.selectedIdx = -1;
+    renderLayout();
+  });
+  div.appendChild(del);
+
+  ['nw', 'n', 'ne', 'e', 'se', 's', 'sw', 'w'].forEach(pos => {
+    const h = document.createElement('div');
+    h.className = 'resize-handle ' + pos;
+    h.dataset.pos = pos;
+    h.addEventListener('mousedown', e => {
+      e.preventDefault();
+      e.stopPropagation();
+      startResize(e, idx, pos);
+    });
+    div.appendChild(h);
+  });
+}
+
+// ===== 拖动 =====
+function startDrag(e, idx) {
+  const el = state.elements[idx];
+  const startX = e.clientX;
+  const startY = e.clientY;
+  const origX = el.x;
+  const origY = el.y;
+  const div = document.querySelector(`.text-element[data-idx="${idx}"]`);
+
+  const onMove = ev => {
+    const dx = (ev.clientX - startX) / state.canvasWidth;
+    const dy = (ev.clientY - startY) / state.canvasHeight;
+    el.x = Math.max(0, Math.min(1 - el.w, origX + dx));
+    el.y = Math.max(0, Math.min(1 - el.h, origY + dy));
+    if (div) {
+      div.style.left = (el.x * 100) + '%';
+      div.style.top = (el.y * 100) + '%';
+    }
+  };
+  const onUp = () => {
+    document.removeEventListener('mousemove', onMove);
+    document.removeEventListener('mouseup', onUp);
+  };
+  document.addEventListener('mousemove', onMove);
+  document.addEventListener('mouseup', onUp);
+}
+
+// ===== 缩放 =====
+function startResize(e, idx, pos) {
+  const el = state.elements[idx];
+  const startX = e.clientX;
+  const startY = e.clientY;
+  const orig = { x: el.x, y: el.y, w: el.w, h: el.h, fontSize: el._fontSizePx };
+
+  const onMove = ev => {
+    const dx = (ev.clientX - startX) / state.canvasWidth;
+    const dy = (ev.clientY - startY) / state.canvasHeight;
+    let { x, y, w, h } = orig;
+    if (pos.includes('e')) w = Math.max(0.02, orig.w + dx);
+    if (pos.includes('s')) h = Math.max(0.01, orig.h + dy);
+    if (pos.includes('w')) { w = Math.max(0.02, orig.w - dx); x = orig.x + (orig.w - w); }
+    if (pos.includes('n')) { h = Math.max(0.01, orig.h - dy); y = orig.y + (orig.h - h); }
+    x = Math.max(0, Math.min(1 - w, x));
+    y = Math.max(0, Math.min(1 - h, y));
+    el.x = x; el.y = y; el.w = w; el.h = h;
+
+    if (pos.length === 2) {
+      const scale = h / orig.h;
+      el._fontSizePx = Math.max(6, orig.fontSize * scale);
+    }
+
+    const div = document.querySelector(`.text-element[data-idx="${idx}"]`);
+    if (div) applyElementStyle(div, el);
+    updateInspector();
+  };
+  const onUp = () => {
+    document.removeEventListener('mousemove', onMove);
+    document.removeEventListener('mouseup', onUp);
+    // 缩放结束后检查溢出
+    const div = document.querySelector(`.text-element[data-idx="${idx}"]`);
+    if (div) checkOverflow(div, el);
+    updateOverflowCount();
+  };
+  document.addEventListener('mousemove', onMove);
+  document.addEventListener('mouseup', onUp);
+}
+
+// ===== 编辑文字 =====
+function enterEditMode(div, idx) {
+  div.classList.add('editing');
+  div.contentEditable = 'true';
+  div.querySelectorAll('.resize-handle, .delete-btn').forEach(h => h.remove());
+  div.focus();
+  const range = document.createRange();
+  range.selectNodeContents(div);
+  const sel = window.getSelection();
+  sel.removeAllRanges();
+  sel.addRange(range);
+
+  const onBlur = () => {
+    div.contentEditable = 'false';
+    div.classList.remove('editing');
+    state.elements[idx].text = div.textContent;
+    div.removeEventListener('blur', onBlur);
+    if (idx === state.selectedIdx) addHandles(div, idx);
+    // 编辑完检查溢出
+    checkOverflow(div, state.elements[idx]);
+    updateOverflowCount();
+  };
+  div.addEventListener('blur', onBlur);
+}
+
+// ===== 属性面板 =====
+function updateInspector() {
+  const ins = $('inspector');
+  if (state.selectedIdx < 0 || !state.elements[state.selectedIdx]) {
+    ins.classList.remove('active');
+    return;
+  }
+  ins.classList.add('active');
+  const el = state.elements[state.selectedIdx];
+  $('fontSizeInput').value = Math.round(el._fontSizePx || 12);
+  $('btnWeight').classList.toggle('active', el.weight === 'bold');
+  $('btnWeight').textContent = el.weight === 'bold' ? '取消加粗' : '加粗';
+  ins.querySelectorAll('[data-align]').forEach(btn => {
+    btn.classList.toggle('active', (el.align || 'left') === btn.dataset.align);
+  });
+}
+
+$('fontSizeInput').oninput = () => {
+  if (state.selectedIdx < 0) return;
+  const el = state.elements[state.selectedIdx];
+  el._fontSizePx = parseFloat($('fontSizeInput').value) || 12;
+  const div = document.querySelector(`.text-element[data-idx="${state.selectedIdx}"]`);
+  if (div) applyElementStyle(div, el);
+};
+
+$('btnWeight').onclick = () => {
+  if (state.selectedIdx < 0) return;
+  const el = state.elements[state.selectedIdx];
+  el.weight = el.weight === 'bold' ? 'normal' : 'bold';
+  const div = document.querySelector(`.text-element[data-idx="${state.selectedIdx}"]`);
+  if (div) applyElementStyle(div, el);
+  updateInspector();
+};
+
+document.querySelectorAll('.inspector [data-align]').forEach(btn => {
+  btn.onclick = () => {
+    if (state.selectedIdx < 0) return;
+    state.elements[state.selectedIdx].align = btn.dataset.align;
+    const div = document.querySelector(`.text-element[data-idx="${state.selectedIdx}"]`);
+    if (div) applyElementStyle(div, state.elements[state.selectedIdx]);
+    updateInspector();
+  };
+});
+
+// 字号适应框
+$('btnFitFontToBox').onclick = () => {
+  if (state.selectedIdx < 0) return;
+  fitFontToBox(state.elements[state.selectedIdx]);
+  renderLayout();
+  selectElement(state.selectedIdx);
+};
+
+// 框体适应字
+$('btnFitBoxToFont').onclick = () => {
+  if (state.selectedIdx < 0) return;
+  fitBoxToFont(state.elements[state.selectedIdx]);
+  renderLayout();
+  selectElement(state.selectedIdx);
+};
+
+// 一键修复所有溢出
+$('fitAllBtn').onclick = () => {
+  const fixed = autoFixOverflow();
+  if (fixed === 0) {
+    setStatus('没有需要修复的溢出元素', 'success');
+  } else {
+    setStatus(`已修复 ${fixed} 处溢出`, 'success');
+  }
+  setTimeout(clearStatus, 2000);
+};
+
+// ===== 键盘 =====
+document.addEventListener('keydown', e => {
+  const activeTag = document.activeElement.tagName;
+  const isEditing = document.querySelector('.text-element.editing');
+  if (['INPUT', 'TEXTAREA'].includes(activeTag) || isEditing) return;
+
+  if (e.key === 'Delete' || e.key === 'Backspace') {
+    if (state.selectedIdx < 0) return;
+    e.preventDefault();
+    state.elements.splice(state.selectedIdx, 1);
+    state.selectedIdx = -1;
+    renderLayout();
+  } else if (e.key === 'Escape') {
+    selectElement(-1);
+  }
+});
+
+// ===== 清空 / 添加 =====
+$('clearBtn').onclick = () => {
+  if (state.elements.length === 0) return;
+  if (!confirm('确定清空所有文字元素吗？')) return;
+  state.elements = [];
+  state.selectedIdx = -1;
+  renderLayout();
+};
+
+$('addTextBtn').onclick = () => {
+  if (state.imageWidth === 0) { setStatus('请先上传参考图', 'error'); return; }
+  state.elements.push({
+    text: '新文字',
+    x: 0.1, y: 0.1, w: 0.3, h: 0.05,
+    fontSize: 0.03, weight: 'normal', align: 'left', role: 'body'
+  });
+  state.selectedIdx = state.elements.length - 1;
+  renderLayout();
+  $('exportBtn').disabled = false;
+};
+
+// ===== 导出 PPTX =====
+$('exportBtn').onclick = async () => {
+  if (state.elements.length === 0) { setStatus('没有可导出的内容', 'error'); return; }
+  try {
+    const pptx = new PptxGenJS();
+    const aspectRatio = state.imageWidth / state.imageHeight;
+    let slideW, slideH;
+    if (aspectRatio < 1) {
+      slideH = 10; slideW = slideH * aspectRatio;
+    } else {
+      slideW = 10; slideH = slideW / aspectRatio;
+    }
+    pptx.defineLayout({ name: 'POSTER', width: slideW, height: slideH });
+    pptx.layout = 'POSTER';
+
+    const slide = pptx.addSlide();
+    slide.background = { color: 'FFFFFF' };
+
+    state.elements.forEach(el => {
+      const x = el.x * slideW;
+      const y = el.y * slideH;
+      const w = el.w * slideW;
+      const h = Math.max(0.3, el.h * slideH); // 最小高度兜底
+      const fontPx = el._fontSizePx || 14;
+      const fontSizePt = Math.max(6, fontPx * (slideH * 72) / state.canvasHeight);
+
+      slide.addText(el.text, {
+        x, y, w, h,
+        fontSize: fontSizePt,
+        fontFace: 'Microsoft YaHei',
+        color: '000000',
+        bold: el.weight === 'bold',
+        align: el.align || 'left',
+        valign: 'top',
+        wrap: true,
+        autoFit: true, // 让 PPT 自动适配
+        margin: 0
+      });
+    });
+
+    const slide2 = pptx.addSlide();
+    slide2.background = { color: 'F5F5F7' };
+    slide2.addText('原始参考图', {
+      x: 0.3, y: 0.2, w: slideW - 0.6, h: 0.4,
+      fontSize: 14, bold: true, fontFace: 'Microsoft YaHei', color: '666666'
+    });
+    const imgAreaH = slideH - 1;
+    const imgAreaW = slideW - 0.6;
+    let imgW, imgH;
+    if (aspectRatio > imgAreaW / imgAreaH) {
+      imgW = imgAreaW; imgH = imgW / aspectRatio;
+    } else {
+      imgH = imgAreaH; imgW = imgH * aspectRatio;
+    }
+    slide2.addImage({
+      data: state.imageBase64,
+      x: (slideW - imgW) / 2,
+      y: 0.7 + (imgAreaH - imgH) / 2,
+      w: imgW, h: imgH
+    });
+
+    await pptx.writeFile({ fileName: 'poster-layout.pptx' });
+    setStatus('PPTX 导出成功！', 'success');
+    setTimeout(clearStatus, 3000);
+  } catch (err) {
+    console.error(err);
+    setStatus('导出失败: ' + err.message, 'error');
+  }
+};
+
+function setStatus(text, type = '') {
+  const s = $('status');
+  s.style.display = 'block';
+  s.className = 'status ' + type;
+  s.textContent = text;
+}
+function clearStatus() { $('status').style.display = 'none'; }
+
+// ===== 窗口 resize =====
+let resizeTimer;
+window.addEventListener('resize', () => {
+  clearTimeout(resizeTimer);
+  resizeTimer = setTimeout(() => {
+    if (state.elements.length === 0) return;
+    const oldCh = state.canvasHeight;
+    state.elements.forEach(el => {
+      if (el._fontSizePx && oldCh) el._fontSizeRatio = el._fontSizePx / oldCh;
+    });
+    renderLayout();
+    state.elements.forEach(el => {
+      if (el._fontSizeRatio) el._fontSizePx = el._fontSizeRatio * state.canvasHeight;
+    });
+    renderLayout();
+  }, 200);
+});
+</script>
+</body>
+</html>
